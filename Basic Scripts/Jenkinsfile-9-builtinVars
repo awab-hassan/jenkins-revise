@@ -1,0 +1,13 @@
+pipeline{
+    agent any
+    stages{
+        stage('built in variables'){
+            steps{
+                echo "Job number : ${env.BUILD_NUMBER}"
+                echo "Job Name: ${env.JOB_NAME}"
+            }
+        }
+    }
+}
+
+// you can use built in vars by ${env.ANY_BUILTIN_VAR_NAME}

@@ -1,0 +1,23 @@
+pipeline {
+    agent any
+    environment {
+        Name = "xyz"
+    }
+    stages {
+        stage('checkout stage'){
+            steps{
+                checkout scmGit(branches: [[name: '*/master']], extensions: [], userRemoteConfigs: [[url: 'https://github.com/DevopsWorking/addressbook.git']])
+            }
+        }
+        stage('Build project'){
+            steps{
+                sh 'mvn compile'
+            }
+        }
+        stage('Info'){
+            steps{
+                echo "Pipeline written by: ${env.Name}"
+            }
+        }
+    }
+}
