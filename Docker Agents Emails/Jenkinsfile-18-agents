@@ -1,0 +1,10 @@
+pipeline{
+    agent 'worker' / any
+    stages{
+        stage('First stage'){
+            steps{
+                echo "Hello "
+            }
+        }
+    }
+}
