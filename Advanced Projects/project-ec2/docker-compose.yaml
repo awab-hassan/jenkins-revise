@@ -1,0 +1,12 @@
+version: '3.8'
+services:
+    java-maven-app-master:
+      image: awabhassan/my-repo:1.1.6-33
+      ports: 
+        - 8080:8080
+    postgres:
+      image: postgres
+      port:
+        - 5432:5432
+      environment:
+        - POSTGRES_PASSWORD=pass 

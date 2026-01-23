@@ -1,0 +1,112 @@
+#!/bin/groovy env
+
+pipeline{
+    agent any
+    tools{
+        maven 'Maven-3.8.6'
+    }
+    environment {
+        AWS_ECR_SERVER = 'XYZ.ap-south-1.amazonaws.com'
+        AWS_ECR_IMAGE_NAME = "${AWS_ECR_SERVER}/test"
+        CLUSTER_NAME = "eks-cluster"
+        CLUSTER_REGION = 'ap-south-1'
+        AWS_ACCESS_KEY_ID = credentials('jenkins_aws_access_key_id')
+        AWS_SECRET_ACCESS_KEY = credentials('jenkins_aws_secret_access_key')
+    }
+    stages {
+        stage('init'){
+            steps{
+                script {
+                    echo "Initializing the script!"
+                    gv = load('script.groovy')
+                }
+            }
+        }
+        stage('Increment Version'){
+            steps{
+                script {
+                    echo "Incrementing the version of our app..."
+                    sh 'mvn build-helper:parse-version versions:set -DnewVersion=\\\${parsedVersion.majorVersion}.\\\${parsedVersion.minorVersion}.\\\${parsedVersion.nextIncrementalVersion} versions:commit'
+                    def matcher = readFile('pom.xml') =~ '<version>(.+)</version>'
+                    def newVersion = matcher[0][1]
+                    env.IMAGE_NAME = "$newVersion-$BUILD_NUMBER"
+                }
+            }
+        }
+        stage('Build App'){
+            steps{
+                script {
+                    echo "Building the app"
+                    sh 'mvn clean package'
+                }
+            }
+        }
+        stage('AWS Login') {
+            steps {
+                script {
+                    echo "Logging in AWS ECR REPO"
+                    withCredentials([usernamePassword(credentialsId: 'ecr-credentials', passwordVariable: 'PASS', usernameVariable: 'USER')]) {
+                        sh "echo $PASS | docker login -u $USER --password-stdin ${AWS_ECR_SERVER}"
+                    }
+                }
+            }
+        }
+        stage('AWS build image') {
+            steps {
+                script {
+                    echo "Building the image"        
+                    sh "docker build -t ${AWS_ECR_IMAGE_NAME}:${IMAGE_NAME} ."
+                }
+            }
+        }
+        stage('AWS Push image') {
+            steps {
+                script {
+                    echo "Pushing the image to repository"
+                    sh "docker push ${AWS_ECR_IMAGE_NAME}:${IMAGE_NAME}"
+                }
+            }
+        }
+        stage('Deploy To Cluster'){
+            environment {
+                APP_NAME = 'java-maven-app'
+                APP_NAMESPACE = 'dev'
+                DB_USER_SECRET = credentials('db_user')
+                DB_PASS_SECRET = credentials('db_pass')
+                DB_NAME_SECRET = credentials('db_name')
+                DB_ROOT_PASS_SECRET = credentials('db_root_pass')
+            }
+            steps{
+                script {
+                    sh "aws eks update-kubeconfig --name ${CLUSTER_NAME} --region ${CLUSTER_REGION}"
+
+                    env.DB_USER = sh(script: 'echo -n $DB_USER_SECRET | base64', returnStdout: true).trim()
+                    env.DB_PASS = sh(script: 'echo -n $DB_PASS_SECRET | base64', returnStdout: true).trim()
+                    env.DB_NAME = sh(script: 'echo -n $DB_NAME_SECRET | base64', returnStdout: true).trim()
+                    env.DB_ROOT_PASS = sh(script: 'echo -n $DB_ROOT_PASS_SECRET | base64', returnStdout: true).trim()
+
+                    echo "starting deployment"
+                    sh 'envsubst < kubernetes/deployment.yaml | kubectl apply -f -'
+                    sh 'envsubst < kubernetes/configmap.yaml | kubectl apply -f -'
+                    sh 'envsubst < kubernetes/secret.yaml | kubectl apply -f -'
+                }
+            }
+        }
+        stage('Git commit'){
+            steps{
+                script {
+                    echo "logging in repository"
+                    withCredentials([usernamePassword(credentialsId: 'gitlab-login' , usernameVariable: 'USER' , passwordVariable: 'PASS')]){
+                        sh 'git config --global user.name "jenkins"'
+                        sh 'git config --global user.email "jenkins@example.com"'
+                        sh "git remote set-url origin https://${USER}:${PASS}@gitlab.com/awabrajpoot88/deploy-to-k8s-jenkins.git/"
+                        sh 'git add .'
+                        sh 'git commit -m -f'
+                        sh 'git push origin HEAD:feature/deploy-to-k8s-ecr-2'
+                    }
+                }
+            }
+        
+        }        
+    }
+}

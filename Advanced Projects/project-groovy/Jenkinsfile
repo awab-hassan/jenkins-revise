@@ -1,0 +1,127 @@
+#!/usr/bin/env groovy
+@Library('shared-library-jenkins')
+def gv 
+// library identifier: 'jenkins-shared-library-scrap.gi@jenkins-shared-library-test-code', retriever: modernSCM(
+//         [$class: 'GitSCMSource',
+//          remote: 'https://gitlab.com/awabrajpoot88/jenkins-shared-library-scrap.gi.git',
+//          credentialsId: 'gitlab-user'
+//         ]
+// )
+
+pipeline {
+
+
+    agent any
+    
+    // Tools if needed :
+
+    tools {
+        maven 'Maven-3.8.6'
+    }
+
+    // Parameters
+
+    parameters {
+        choice(name: 'App-Version' , choices: ['Version-1.0','Version-1.1','Version-1.2','Version-1.3',
+        'Version-1.4','Version-1.5',] , description:'')
+        
+        booleanParam(name: 'executeTests', defaultValue: false , description: '')
+
+        booleanParam(name: 'buildImage' , defaultValue: true , description: '')
+    }
+    
+    // Staing :
+
+    stages {
+        // stage ## 0 Initializing the script!!!!!!!!!
+        // initializing the SCRIPT!
+
+        stage('init') {
+            steps {
+                script {
+                    gv = load "script.groovy"
+                }
+            }
+        }
+
+        // stage ## 2 test the app!
+        stage("test") {
+            // when {
+            //     expression {
+            //         params.executeTests
+            //     }
+            // }
+
+            
+
+            steps {
+                script {
+                    echo "brand"
+                    gv.test()
+                }
+            }
+        }
+
+        
+        // stage ## 1 build the app in JAR Arifact!
+        stage("build jar") {
+            steps {
+                script {
+                    buildJar()
+                }
+            }
+        }
+
+        
+        // stage ## 3 build the app in Docker image!
+        stage("image") {
+            when {
+                expression {
+                    params.buildImage
+                }
+            }
+            steps {
+                script {
+                    buildImage 'awabhassan/my-repo:jma-final-pipeline'
+                }
+            }
+        }
+
+        stage("Docker login") {
+            steps {
+                script {
+                    dockerLogin()
+                }
+            }
+        }
+        
+        stage("Docker push") {
+            steps {
+                script {
+                    dockerPush 'awabhassan/my-repo:jma-final-pipeline'
+                }
+            }
+        }
+        
+        // stage ## 3 deploy the app in repo!
+        stage("deploy") {
+            steps {
+                script {
+                    gv.deployApp()
+                }
+            }
+        }
+    } 
+}
+
+
+
+
+
+
+
+
+
+
+
+
